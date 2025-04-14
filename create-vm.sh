@@ -2,9 +2,9 @@
 set -e
 
 # Check parameters
-if [ $# -ne 3 ]; then
-    echo "Usage: $0 <vm_id> <vm_name> <ip_address>"
-    echo "Example: $0 109 ubuntu-vm 10.0.0.109/24"
+if [ $# -ne 4 ]; then
+    echo "Usage: $0 <vm_id> <vm_name> <ip_address> <ssh_key_file>"
+    echo "Example: $0 109 ubuntu-vm 10.0.0.109/24 /root/.ssh/id_rsa.pub"
     exit 1
 fi
 
@@ -13,6 +13,7 @@ TEMPLATE_ID=9003
 NEW_VMID=$1
 VM_NAME=$2
 IP_ADDRESS=$3
+SSH_KEY_FILE=$4
 
 # Check if template exists and is stopped
 echo "Checking template status..."
@@ -41,6 +42,15 @@ if ! echo $IP_ADDRESS | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$'; then
     exit 1
 fi
 
+# Validate SSH key file
+if [ ! -f "$SSH_KEY_FILE" ]; then
+    echo "Error: SSH key file $SSH_KEY_FILE not found"
+    exit 1
+fi
+
+# Read SSH key content
+SSH_KEY=$(cat "$SSH_KEY_FILE")
+
 # Clone the VM
 echo "Cloning VM..."
 qm clone $TEMPLATE_ID $NEW_VMID --name $VM_NAME
@@ -52,5 +62,9 @@ qm set $NEW_VMID --boot order=scsi0
 # Configure static IP
 echo "Configuring static IP..."
 qm set $NEW_VMID --ipconfig0 ip=$IP_ADDRESS,gw=10.0.0.1
+
+# Configure SSH key
+echo "Configuring SSH key..."
+qm set $NEW_VMID --sshkeys "$SSH_KEY_FILE"
 
 echo "VM creation completed successfully"
