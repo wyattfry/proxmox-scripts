@@ -1,2 +1,3 @@
 *.qcow2
-template_creation_20250413_172135.log template_creation_20250413_172616.log template_creation_20250413_172756.log template_creation_20250413_173111.log template_creation_20250413_173321.log template_creation_20250413_173522.log template_creation_20250413_173804.log template_creation_20250413_173933.log template_creation_20250413_174051.log
+*.log
+*.backup
