@@ -25,12 +25,12 @@ cleanup() {
 trap cleanup EXIT
 
 # Script variables
-VM_ID=9003
+VM_ID=$1
 STORAGE="nfs-storage"
 MEMORY=2048
 CORES=2
 DISK_SIZE="10G"
-TEMPLATE_NAME="template-2025-04-13"
+TEMPLATE_NAME="$2"
 IMAGE_URL="https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
 
 # Validate storage availability
@@ -39,16 +39,26 @@ if ! pvesm status | grep -q "^${STORAGE}"; then
     exit 1
 fi
 
+# Check if virt-customize is installed
+if ! command -v virt-customize >/dev/null 2>&1; then
+    echo "Installing libguestfs-tools..."
+    apt-get update && apt-get install -y libguestfs-tools
+fi
+
 echo "Environment setup completed successfully"
 
 # Download Ubuntu cloud image
-echo "Checking for Ubuntu cloud image..." | tee -a "$LOG_FILE"
+echo "Checking for Ubuntu cloud image..."
 if [ ! -f "jammy-server-cloudimg-amd64.img" ]; then
-    echo "Downloading Ubuntu cloud image..." | tee -a "$LOG_FILE"
+    echo "Downloading Ubuntu cloud image..."
     wget "${IMAGE_URL}" -O jammy-server-cloudimg-amd64.img >/dev/null 2>>"$LOG_FILE"
 else
-    echo "Cloud image already exists, skipping download" | tee -a "$LOG_FILE"
+    echo "Cloud image already exists, skipping download"
 fi
+
+# Install qemu-guest-agent in the image
+echo "Installing qemu-guest-agent in the image..."
+virt-customize -a jammy-server-cloudimg-amd64.img --install qemu-guest-agent
 
 # Convert image to Proxmox format
 echo "Converting image to QCOW2 format..."
@@ -74,6 +84,10 @@ qm importdisk ${VM_ID} "vm-${VM_ID}-disk-0.qcow2" ${STORAGE} 2>&1 | grep -v "tra
 echo "Configuring storage settings..."
 qm set ${VM_ID} --scsihw virtio-scsi-pci --scsi0 ${STORAGE}:${VM_ID}/vm-${VM_ID}-disk-0.raw
 qm resize ${VM_ID} scsi0 ${DISK_SIZE}
+
+# Enable QEMU Guest Agent
+echo "Enabling QEMU Guest Agent..."
+qm set ${VM_ID} --agent enabled=1
 
 # Verify VM creation
 if ! qm status ${VM_ID} &>/dev/null; then
@@ -111,6 +125,12 @@ fi
 # Verify network configuration
 if ! qm config ${VM_ID} | grep -q 'ipconfig0: ip=dhcp'; then
     echo "Error: DHCP network configuration not set correctly"
+    exit 1
+fi
+
+# Verify QEMU Guest Agent is enabled
+if ! qm config ${VM_ID} | grep -q 'agent: enabled=1'; then
+    echo "Error: QEMU Guest Agent not enabled"
     exit 1
 fi
 
