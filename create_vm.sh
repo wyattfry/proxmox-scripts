@@ -2,9 +2,9 @@
 set -e
 
 # Check parameters
-if [ $# -ne 4 ]; then
-    echo "Usage: $0 <vm_id> <vm_name> <ip_address> <ssh_key_file>"
-    echo "Example: $0 109 ubuntu-vm 10.0.0.109/24 /root/.ssh/id_rsa.pub"
+if [ $# -ne 7 ]; then
+    echo "Usage: $0 <vm_id> <vm_name> <ip_address> <ssh_key_file> <disk_gb> <ram_mb> <cores>"
+    echo "Example: $0 109 ubuntu-vm 10.0.0.109/24 /root/.ssh/id_rsa.pub 10 2048 2"
     exit 1
 fi
 
@@ -14,6 +14,24 @@ NEW_VMID=$1
 VM_NAME=$2
 IP_ADDRESS=$3
 SSH_KEY_FILE=$4
+DISK_GB=$5
+RAM_MB=$6
+CORES=$7
+
+# Validate numeric parameters
+if ! [[ "$DISK_GB" =~ ^[0-9]+$ ]] || ! [[ "$RAM_MB" =~ ^[0-9]+$ ]] || ! [[ "$CORES" =~ ^[0-9]+$ ]]; then
+    echo "Error: Disk size, RAM, and cores must be positive integers"
+    exit 1
+fi
+
+# Validate minimum values
+if [ "$DISK_GB" -lt 5 ] || [ "$RAM_MB" -lt 512 ] || [ "$CORES" -lt 1 ]; then
+    echo "Error: Minimum requirements not met:"
+    echo "  - Disk size must be at least 5 GB"
+    echo "  - RAM must be at least 512 MB"
+    echo "  - Cores must be at least 1"
+    exit 1
+fi
 
 # Check if template exists and is stopped
 echo "Checking template status..."
@@ -67,8 +85,20 @@ qm set $NEW_VMID --ipconfig0 ip=$IP_ADDRESS,gw=10.0.0.1
 echo "Configuring SSH key..."
 qm set $NEW_VMID --sshkeys "$SSH_KEY_FILE"
 
+# Configure resource parameters
+echo "Configuring VM resources..."
+qm set $NEW_VMID --memory $RAM_MB
+qm set $NEW_VMID --cores $CORES
+qm resize $NEW_VMID scsi0 ${DISK_GB}G
+
 # Ensure QEMU Guest Agent is enabled
 echo "Ensuring QEMU Guest Agent is enabled..."
 qm set $NEW_VMID --agent enabled=1
 
 echo "VM creation completed successfully"
+echo "VM ID: $NEW_VMID"
+echo "Name: $VM_NAME"
+echo "IP Address: $IP_ADDRESS"
+echo "Disk: ${DISK_GB}GB"
+echo "RAM: ${RAM_MB}MB"
+echo "Cores: $CORES"
